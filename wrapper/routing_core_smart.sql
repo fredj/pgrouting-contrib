@@ -371,7 +371,8 @@ LANGUAGE 'plpgsql' VOLATILE STRICT;
 
 
 CREATE OR REPLACE FUNCTION shootingstar_sp_smart(
-       geom_table varchar, source_x float8, source_y float8, target_x float8, target_y float8, delta float8, cost_column varchar, dir boolean, rc boolean) 
+       geom_table varchar, source_x float8, source_y float8, target_x float8, target_y float8, 
+       delta float8, bbox varchar, cost_column varchar, dir boolean, rc boolean) 
        RETURNS SETOF GEOMS AS
 $$
 DECLARE
@@ -379,7 +380,7 @@ r record;
 g geoms;
 BEGIN
   FOR r IN EXECUTE 'SELECT id, gid, the_geom from shootingstar_sp_smart('''||geom_table||''', '||source_x||', '||source_y||', '||target_x||
-                   ', '||target_y||', '||delta||', '''||cost_column||''', ''reverse_cost'', ''to_cost'', '||text(dir)||', '||text(rc)||')'
+                   ', '||target_y||', '||delta||', '''||bbox||''', '''||cost_column||''', ''reverse_cost'', ''to_cost'', '||text(dir)||', '||text(rc)||')'
   LOOP
     g.id := r.id;
     g.gid := r.gid;
@@ -394,7 +395,8 @@ LANGUAGE 'plpgsql' VOLATILE STRICT;
 
 
 CREATE OR REPLACE FUNCTION shootingstar_sp_smart(
-       geom_table varchar, source_x float8, source_y float8, target_x float8, target_y float8, delta float8, cost_column varchar, reverse_cost_column varchar, dir boolean, rc boolean) 
+       geom_table varchar, source_x float8, source_y float8, target_x float8, target_y float8, 
+       delta float8, bbox varchar, cost_column varchar, reverse_cost_column varchar, dir boolean, rc boolean) 
        RETURNS SETOF GEOMS AS
 $$
 DECLARE
@@ -402,7 +404,7 @@ r record;
 g geoms;
 BEGIN
   FOR r IN EXECUTE 'SELECT id, gid, the_geom from shootingstar_sp_smart('''||geom_table||''', '||source_x||', '||source_y||', '||target_x||
-                   ', '||target_y||', '||delta||', '''||cost_column||''', '''||reverse_cost_column||''', ''to_cost'', '||text(dir)||', '||text(rc)||')'
+                   ', '||target_y||', '||delta||', '''||bbox||''', '''||cost_column||''', '''||reverse_cost_column||''', ''to_cost'', '||text(dir)||', '||text(rc)||')'
   LOOP
     g.id := r.id;
     g.gid := r.gid;
@@ -417,7 +419,8 @@ LANGUAGE 'plpgsql' VOLATILE STRICT;
 
 
 CREATE OR REPLACE FUNCTION shootingstar_sp_smart(
-       geom_table varchar, source_x float8, source_y float8, target_x float8, target_y float8, delta float8, cost_column varchar, reverse_cost_column varchar, to_cost_column varchar, dir boolean, rc boolean) 
+       geom_table varchar, source_x float8, source_y float8, target_x float8, target_y float8, 
+       delta float8, bbox varchar, cost_column varchar, reverse_cost_column varchar, to_cost_column varchar, dir boolean, rc boolean) 
        RETURNS SETOF GEOMS AS
 $$
 DECLARE 
@@ -447,6 +450,7 @@ DECLARE
         ur_y float8;
 
         query text;
+        geom_filter text;
 	i integer;
 
         id integer;
@@ -729,10 +733,18 @@ BEGIN
           
         IF rc THEN query := query || ' , '||reverse_cost_column||'::double precision as reverse_cost ';  
         END IF;
+
+        IF bbox <> '' THEN
+           geom_filter := bbox;
+        ELSE
+           geom_filter := 'setSRID(''''BOX3D('|| ll_x-delta||' '||ll_y-delta||','||ur_x+delta||' '|| ur_y+delta||')''''::BOX3D, ' || srid || ')';
+        END IF;
+
+        query := query || 'FROM ' || quote_ident(geom_table) || ' where ' || geom_filter || '&& the_geom';
           
-        query := query || 'FROM ' || quote_ident(geom_table) || ' where setSRID(''''BOX3D('||
-          ll_x-delta||' '||ll_y-delta||','||ur_x+delta||' '||
-          ur_y+delta||')''''::BOX3D, ' || srid || ') && the_geom';
+        -- query := query || 'FROM ' || quote_ident(geom_table) || ' where setSRID(''''BOX3D('||
+        --   ll_x-delta||' '||ll_y-delta||','||ur_x+delta||' '||
+        --   ur_y+delta||')''''::BOX3D, ' || srid || ') && the_geom';
 
 --	RAISE NOTICE 'Query: %', query;
 
@@ -806,7 +818,7 @@ LANGUAGE 'plpgsql' VOLATILE STRICT;
 
 CREATE OR REPLACE FUNCTION sp_smart_directed(
        geom_table varchar, heuristic boolean, source_x float8, source_y float8, target_x float8, target_y float8, 
-       delta float8, cost_column varchar, reverse_cost_column varchar, dir boolean, rc boolean) 
+       delta float8, bbox varchar, cost_column varchar, reverse_cost_column varchar, dir boolean, rc boolean) 
        RETURNS SETOF GEOMS AS
 $$
 DECLARE 
@@ -834,6 +846,7 @@ DECLARE
         ur_y float8;
 
         query text;
+        geom_filter text;
 	i integer;
 	
 	fname text;
@@ -1071,10 +1084,14 @@ BEGIN
           
         IF rc THEN query := query || ' , '||reverse_cost_column||' as reverse_cost ';  
         END IF;
-          
-        query := query || 'FROM ' || quote_ident(geom_table) || ' where setSRID(''''BOX3D('||
-          ll_x-delta||' '||ll_y-delta||','||ur_x+delta||' '||
-          ur_y+delta||')''''::BOX3D, ' || srid || ') && the_geom';
+
+        IF bbox <> '' THEN
+           geom_filter := bbox;
+        ELSE
+           geom_filter := 'setSRID(''''BOX3D('|| ll_x-delta||' '||ll_y-delta||','||ur_x+delta||' '|| ur_y+delta||')''''::BOX3D, ' || srid || ')';
+        END IF;
+
+        query := query || 'FROM ' || quote_ident(geom_table) || ' where ' || geom_filter || '&& the_geom';
 
 --	RAISE NOTICE 'Query: %', query;
 
